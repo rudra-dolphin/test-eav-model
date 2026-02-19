@@ -104,7 +104,7 @@ class FormStructureController extends Controller
                     $sections[] = [
                         'id' => $currentSection['id'] ?? $form->slug . '_intro',
                         'title' => $currentSection['title'] ?? '',
-                        'fields' => $this->normalizeFieldsForApi($currentFields),
+                        'fields' => $this->nestFieldsByShowIf($this->normalizeFieldsForApi($currentFields)),
                     ];
                 }
                 $currentSection = [
@@ -122,11 +122,93 @@ class FormStructureController extends Controller
             $sections[] = [
                 'id' => $currentSection['id'] ?? $form->slug . '_intro',
                 'title' => $currentSection['title'] ?? '',
-                'fields' => $this->normalizeFieldsForApi($currentFields),
+                'fields' => $this->nestFieldsByShowIf($this->normalizeFieldsForApi($currentFields)),
             ];
         }
 
         return $sections;
+    }
+
+    /**
+     * Nest fields that have showIf under their parent field as "children".
+     * - When children have different trigger values (e.g. diabetes, hypertension), group by that value
+     *   so values sit under "diabetes" / "hypertension", not flat under the parent.
+     * - When all children share one trigger value (e.g. yes/no), keep a single list under that value.
+     * Field keys are ordered so "options" comes last (after "children") in the JSON.
+     *
+     * @param array<int, array<string, mixed>> $fields Normalized flat fields (with showIf where applicable)
+     * @return array<int, array<string, mixed>>
+     */
+    private function nestFieldsByShowIf(array $fields): array
+    {
+        $parentIdToChildren = [];
+        foreach ($fields as $f) {
+            $parentId = $f['showIf']['field'] ?? null;
+            if ($parentId !== null && $parentId !== '') {
+                $triggerValue = $f['showIf']['value'] ?? '';
+                $parentIdToChildren[$parentId] = $parentIdToChildren[$parentId] ?? [];
+                $parentIdToChildren[$parentId][] = ['triggerValue' => $triggerValue, 'field' => $this->fieldWithOptionsLast($f)];
+            }
+        }
+
+        $result = [];
+        foreach ($fields as $f) {
+            if (! empty($f['showIf']['field'])) {
+                continue;
+            }
+            $id = $f['id'] ?? '';
+            $rawChildren = $parentIdToChildren[$id] ?? [];
+            if ($rawChildren !== []) {
+                $triggerValues = array_unique(array_column($rawChildren, 'triggerValue'));
+                if (count($triggerValues) > 1) {
+                    $f['children'] = $this->groupChildrenByTriggerValue($rawChildren);
+                } else {
+                    $f['children'] = array_map(fn ($c) => $c['field'], $rawChildren);
+                }
+            }
+            $result[] = $this->fieldWithOptionsLast($f);
+        }
+        return $result;
+    }
+
+    /**
+     * Group child fields by showIf.value (e.g. diabetes, hypertension) so values are under that key.
+     *
+     * @param array<int, array{triggerValue: string, field: array<string, mixed>}> $rawChildren
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function groupChildrenByTriggerValue(array $rawChildren): array
+    {
+        $byValue = [];
+        foreach ($rawChildren as $c) {
+            $v = $c['triggerValue'] ?? '';
+            $byValue[$v] = $byValue[$v] ?? [];
+            $byValue[$v][] = $c['field'];
+        }
+        return $byValue;
+    }
+
+    /**
+     * Return field with key order so "options" is last (after "children") in JSON.
+     *
+     * @param array<string, mixed> $field
+     * @return array<string, mixed>
+     */
+    private function fieldWithOptionsLast(array $field): array
+    {
+        $order = ['id', 'label', 'type', 'required', 'placeholder', 'helpText', 'errorMessage', 'validation', 'showIf', 'children', 'options'];
+        $out = [];
+        foreach ($order as $key) {
+            if (array_key_exists($key, $field)) {
+                $out[$key] = $field[$key];
+            }
+        }
+        foreach ($field as $key => $value) {
+            if (! array_key_exists($key, $out)) {
+                $out[$key] = $value;
+            }
+        }
+        return $out;
     }
 
     /**
