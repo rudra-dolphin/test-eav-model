@@ -48,7 +48,7 @@
 
     <div class="card">
         <h2 style="margin: 0 0 0.75rem;">Fields</h2>
-        <p style="margin: 0 0 1rem; color: #555;">Add dynamic fields (text, number, date, dropdown, radio, checkbox). Order by sort order.</p>
+        <p style="margin: 0 0 1rem; color: #555;">Add fields and headings. Use <strong>Move up</strong> / <strong>Move down</strong> to place titles and fields in the right order on the form.</p>
         <p style="margin-bottom: 1rem;"><a href="{{ route('forms.build.fields.create', $form) }}" class="btn">+ Add field</a></p>
         @if ($form->fields->isEmpty())
             <p style="color: #666;">No fields yet. Click "Add field" to add the first one.</p>
@@ -56,20 +56,33 @@
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="text-align: left; border-bottom: 1px solid #ddd;">
+                        <th style="padding: 0.5rem 0; width: 4rem;">#</th>
                         <th style="padding: 0.5rem 0;">Name</th>
                         <th style="padding: 0.5rem 0;">Label</th>
                         <th style="padding: 0.5rem 0;">Type</th>
                         <th style="padding: 0.5rem 0;">Required</th>
+                        <th style="padding: 0.5rem 0;">Placement</th>
                         <th style="padding: 0.5rem 0;"></th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($form->fields as $field)
+                    @foreach ($form->fields as $index => $field)
                         <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 0.5rem 0;">{{ $index + 1 }}</td>
                             <td style="padding: 0.5rem 0;"><code>{{ $field->name }}</code></td>
                             <td style="padding: 0.5rem 0;">{{ $field->label }}</td>
                             <td style="padding: 0.5rem 0;">{{ $field->fieldType->name }}</td>
                             <td style="padding: 0.5rem 0;">{{ $field->is_required ? 'Yes' : 'No' }}</td>
+                            <td style="padding: 0.5rem 0;">
+                                <form action="{{ route('forms.build.fields.moveUp', [$form, $field]) }}" method="post" style="display: inline;">
+                                    @csrf
+                                    <button type="submit" style="background: none; border: none; color: #2563eb; cursor: pointer; font-size: 0.85rem; padding: 0.2rem 0.4rem;" title="Move earlier on form" @if ($index === 0) disabled @endif>↑ Up</button>
+                                </form>
+                                <form action="{{ route('forms.build.fields.moveDown', [$form, $field]) }}" method="post" style="display: inline;">
+                                    @csrf
+                                    <button type="submit" style="background: none; border: none; color: #2563eb; cursor: pointer; font-size: 0.85rem; padding: 0.2rem 0.4rem;" title="Move later on form" @if ($index === $form->fields->count() - 1) disabled @endif>↓ Down</button>
+                                </form>
+                            </td>
                             <td style="padding: 0.5rem 0;">
                                 <a href="{{ route('forms.build.fields.edit', [$form, $field]) }}" class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.9rem;">Edit</a>
                                 <form action="{{ route('forms.build.fields.destroy', [$form, $field]) }}" method="post" style="display: inline;">

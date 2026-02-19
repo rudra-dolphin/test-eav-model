@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attribute;
+use App\Models\AttributeCondition;
 use App\Models\AttributeOption;
 use App\Models\Department;
 use App\Models\FieldType;
@@ -93,11 +94,13 @@ class FormBuilderController extends Controller
     public function createField(Form $form): View
     {
         $fieldTypes = FieldType::orderBy('name')->get();
+        $parentFieldsWithOptions = $this->getParentFieldsWithOptions($form, null);
 
         return view('forms.build.field-form', [
             'form' => $form,
             'field' => null,
             'fieldTypes' => $fieldTypes,
+            'parentFieldsWithOptions' => $parentFieldsWithOptions,
         ]);
     }
 
@@ -124,8 +127,11 @@ class FormBuilderController extends Controller
         $valid['form_id'] = $form->id;
         $valid['sort_order'] = (int) ($valid['sort_order'] ?? $form->fields()->max('sort_order') + 1);
         $valid['is_required'] = $request->boolean('is_required');
+        unset($valid['conditional_logic']);
 
         $attr = Attribute::create($valid);
+
+        $this->saveAttributeCondition($request, $form, $attr);
 
         if ($attr->fieldType->supports_options) {
             return redirect()->route('forms.build.fields.edit', [$form, $attr])
@@ -144,13 +150,15 @@ class FormBuilderController extends Controller
         if ($field->form_id !== $form->id) {
             abort(404);
         }
-        $field->load('fieldType', 'options');
+        $field->load('fieldType', 'options', 'attributeCondition.parentAttribute');
         $fieldTypes = FieldType::orderBy('name')->get();
+        $parentFieldsWithOptions = $this->getParentFieldsWithOptions($form, $field->id);
 
         return view('forms.build.field-form', [
             'form' => $form,
             'field' => $field,
             'fieldTypes' => $fieldTypes,
+            'parentFieldsWithOptions' => $parentFieldsWithOptions,
         ]);
     }
 
@@ -179,11 +187,66 @@ class FormBuilderController extends Controller
 
         $valid['sort_order'] = (int) ($valid['sort_order'] ?? $field->sort_order);
         $valid['is_required'] = $request->boolean('is_required');
+        unset($valid['conditional_logic']);
 
         $field->update($valid);
 
+        $this->saveAttributeCondition($request, $form, $field);
+
         return redirect()->route('forms.build.edit', $form)
             ->with('message', 'Field updated.');
+    }
+
+    /**
+     * Move field up (decrease position in form).
+     */
+    public function moveFieldUp(Form $form, Attribute $field): RedirectResponse
+    {
+        if ($field->form_id !== $form->id) {
+            abort(404);
+        }
+        $ordered = $form->fields()->orderBy('sort_order')->orderBy('id')->pluck('id')->values()->all();
+        $pos = array_search((int) $field->id, $ordered, true);
+        if ($pos === false || $pos === 0) {
+            return redirect()->route('forms.build.edit', $form);
+        }
+        // Swap with previous in list, then renumber sort_order
+        $prevId = $ordered[$pos - 1];
+        $ordered[$pos - 1] = (int) $field->id;
+        $ordered[$pos] = $prevId;
+        $this->applyFieldOrder($form, $ordered);
+        return redirect()->route('forms.build.edit', $form)->with('message', 'Order updated.');
+    }
+
+    /**
+     * Move field down (increase position in form).
+     */
+    public function moveFieldDown(Form $form, Attribute $field): RedirectResponse
+    {
+        if ($field->form_id !== $form->id) {
+            abort(404);
+        }
+        $ordered = $form->fields()->orderBy('sort_order')->orderBy('id')->pluck('id')->values()->all();
+        $pos = array_search((int) $field->id, $ordered, true);
+        if ($pos === false || $pos === count($ordered) - 1) {
+            return redirect()->route('forms.build.edit', $form);
+        }
+        // Swap with next in list, then renumber sort_order
+        $nextId = $ordered[$pos + 1];
+        $ordered[$pos + 1] = (int) $field->id;
+        $ordered[$pos] = $nextId;
+        $this->applyFieldOrder($form, $ordered);
+        return redirect()->route('forms.build.edit', $form)->with('message', 'Order updated.');
+    }
+
+    /**
+     * Set sort_order to 0, 1, 2, ... for the given order of attribute ids.
+     */
+    private function applyFieldOrder(Form $form, array $orderedIds): void
+    {
+        foreach ($orderedIds as $sortOrder => $id) {
+            Attribute::where('id', $id)->where('form_id', $form->id)->update(['sort_order' => $sortOrder]);
+        }
     }
 
     /**
@@ -229,5 +292,58 @@ class FormBuilderController extends Controller
 
         return redirect()->route('forms.build.fields.edit', [$form, $field])
             ->with('message', 'Options saved.');
+    }
+
+    /**
+     * Parent fields that have options (for "Show when" dropdown + trigger value).
+     */
+    private function getParentFieldsWithOptions(Form $form, ?int $excludeAttributeId): array
+    {
+        $query = $form->fields()->with('options', 'fieldType')->orderBy('sort_order');
+        if ($excludeAttributeId !== null) {
+            $query->where('id', '!=', $excludeAttributeId);
+        }
+        $attrs = $query->get();
+        $result = [];
+        foreach ($attrs as $a) {
+            if (! $a->fieldType->supports_options || $a->options->isEmpty()) {
+                continue;
+            }
+            $result[] = [
+                'id' => $a->id,
+                'label' => $a->label,
+                'options' => $a->options->map(fn ($o) => ['value' => $o->value, 'label' => $o->label])->values()->all(),
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     * Save or remove attribute_condition from request (show_if_parent_id, show_if_trigger_value).
+     */
+    private function saveAttributeCondition(Request $request, Form $form, Attribute $attr): void
+    {
+        $parentId = $request->input('show_if_parent_id');
+        $triggerValue = $request->input('show_if_trigger_value');
+
+        if ($parentId === null || $parentId === '' || $triggerValue === null || (string) $triggerValue === '') {
+            $attr->attributeCondition?->delete();
+            return;
+        }
+
+        $parentId = (int) $parentId;
+        $parent = $form->fields()->find($parentId);
+        if (! $parent) {
+            return;
+        }
+
+        $attr->attributeCondition()->updateOrCreate(
+            [],
+            [
+                'parent_attribute_id' => $parentId,
+                'operator' => '=',
+                'trigger_value' => (string) $triggerValue,
+            ]
+        );
     }
 }

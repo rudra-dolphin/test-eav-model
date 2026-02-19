@@ -33,7 +33,7 @@ class Form extends Model
      */
     public function fields(): HasMany
     {
-        return $this->hasMany(Attribute::class)->orderBy('sort_order');
+        return $this->hasMany(Attribute::class)->orderBy('sort_order')->orderBy('id');
     }
 
     /**
@@ -51,6 +51,8 @@ class Form extends Model
      */
     public function toFormStructure(): array
     {
+        $this->loadMissing('fields.attributeCondition.parentAttribute');
+
         $fields = $this->fields->map(function (Attribute $attr) {
             $field = [
                 'id' => $attr->name,
@@ -67,8 +69,21 @@ class Form extends Model
             if (! empty($attr->validation_config)) {
                 $field['validation'] = $attr->validation_config;
             }
-            if (! empty($attr->conditional_logic)) {
-                $field['showIf'] = $attr->conditional_logic;
+            $condition = $attr->attributeCondition;
+            if ($condition && $condition->parentAttribute) {
+                $field['showIf'] = [
+                    'field' => $condition->parentAttribute->name,
+                    'value' => $condition->trigger_value,
+                ];
+            } elseif (! empty($attr->conditional_logic)) {
+                $logic = $attr->conditional_logic;
+                $field['showIf'] = [
+                    'field' => $logic['field'] ?? $logic['showIf']['field'] ?? null,
+                    'value' => $logic['value'] ?? $logic['showIf']['value'] ?? null,
+                ];
+                if ($field['showIf']['field'] === null && $field['showIf']['value'] === null) {
+                    $field['showIf'] = $logic;
+                }
             }
             if ($attr->fieldType->supports_options && $attr->options->isNotEmpty()) {
                 $field['options'] = $attr->options->map(fn ($o) => [

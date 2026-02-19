@@ -18,23 +18,46 @@
         </p>
     </div>
 
-    <form action="{{ route('patients.submissions.update', [$patient, $entity]) }}" method="post" class="card">
+    <div class="card">
+    <form id="submission-edit-form" action="{{ route('patients.submissions.update', [$patient, $entity]) }}" method="post">
         @csrf
         @method('PUT')
 
         @foreach ($fields as $attr)
             @php
-                $av = $valuesByAttributeId->get($attr->id);
                 $type = $attr->fieldType->slug;
+            @endphp
+            @if ($type === 'heading')
+                <div class="form-section-title" id="section-{{ $attr->name }}">{{ $attr->label }}</div>
+                @continue
+            @endif
+            @if ($type === 'heading_sub')
+                <div class="form-subsection-title" id="section-{{ $attr->name }}">{{ $attr->label }}</div>
+                @continue
+            @endif
+            @php
+                $av = $valuesByAttributeId->get($attr->id);
                 $current = $av?->value;
                 $currentCheckbox = [];
                 if ($type === 'checkbox' && $attr->fieldType->allows_multiple && is_string($av?->value_text)) {
                     $decoded = json_decode($av->value_text, true);
                     if (is_array($decoded)) $currentCheckbox = $decoded;
                 }
+                $showIf = $attr->getShowIf();
+                $hasShowIf = !empty($showIf) && !empty($showIf['field']);
+                $parentId = $hasShowIf ? ($showIf['field'] ?? '') : '';
+                $triggerValue = $hasShowIf ? ($showIf['value'] ?? '') : '';
+                $isMatch = false;
+                if ($hasShowIf && $parentId) {
+                    $parentAttr = $fields->firstWhere('name', $parentId);
+                    $parentSaved = $parentAttr ? $valuesByAttributeId->get($parentAttr->id)?->value : null;
+                    $parentVal = old($parentId, $parentSaved);
+                    $isMatch = (string)($parentVal ?? '') === (string)$triggerValue;
+                }
             @endphp
 
-            <div class="field">
+            <div class="field @if ($hasShowIf) conditional-field @endif @if ($hasShowIf && !$isMatch) conditional-hidden @endif"
+                 @if ($hasShowIf) data-show-if-field="{{ $parentId }}" data-show-if-value="{{ $triggerValue }}" @endif>
                 <label for="field-{{ $attr->name }}" @if ($attr->is_required) class="required" @endif>
                     {{ $attr->label }}
                 </label>
@@ -106,5 +129,52 @@
 
         <button type="submit" class="btn">Save changes</button>
     </form>
+    </div>
+
+    @push('scripts')
+    <script>
+    (function () {
+        var form = document.getElementById('submission-edit-form') || document.querySelector('.card form');
+        if (!form) return;
+        var conditionalFields = form.querySelectorAll('.conditional-field');
+        if (!conditionalFields.length) return;
+
+        function getParentValue(fieldId) {
+            var checkboxGroup = form.querySelector('[name="' + fieldId + '_checkbox[]"]');
+            if (checkboxGroup) {
+                var cbs = form.querySelectorAll('[name="' + fieldId + '_checkbox[]"]:checked');
+                if (cbs.length === 0) return '';
+                return Array.prototype.map.call(cbs, function (c) { return c.value; }).join(',');
+            }
+            var input = form.querySelector('[name="' + fieldId + '"]');
+            if (!input) return '';
+            if (input.type === 'radio') {
+                var checked = form.querySelector('[name="' + fieldId + '"]:checked');
+                return checked ? checked.value : '';
+            }
+            if (input.type === 'checkbox') return input.checked ? input.value : '';
+            return input.value || '';
+        }
+
+        function toggleConditionalFields() {
+            conditionalFields.forEach(function (wrap) {
+                var parentId = wrap.getAttribute('data-show-if-field');
+                var triggerValue = wrap.getAttribute('data-show-if-value');
+                if (!parentId) return;
+                var current = getParentValue(parentId);
+                var match = (current === triggerValue) || (triggerValue && current.split(',').indexOf(triggerValue) !== -1);
+                wrap.classList.toggle('conditional-hidden', !match);
+                wrap.querySelectorAll('input, select, textarea').forEach(function (el) {
+                    el.disabled = !match;
+                });
+            });
+        }
+
+        form.addEventListener('change', toggleConditionalFields);
+        form.addEventListener('input', toggleConditionalFields);
+        toggleConditionalFields();
+    })();
+    </script>
+    @endpush
 @endsection
 

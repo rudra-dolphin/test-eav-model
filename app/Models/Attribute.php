@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Attribute extends Model
 {
@@ -67,5 +68,35 @@ class Attribute extends Model
     public function attributeValues(): HasMany
     {
         return $this->hasMany(AttributeValue::class, 'attribute_id');
+    }
+
+    /**
+     * Condition for when this field is shown (dependent on another field's value).
+     */
+    public function attributeCondition(): HasOne
+    {
+        return $this->hasOne(AttributeCondition::class);
+    }
+
+    /**
+     * Get showIf rule for end-user forms (from attribute_conditions or conditional_logic).
+     *
+     * @return array{field: string, value: string}|null
+     */
+    public function getShowIf(): ?array
+    {
+        $cond = $this->relationLoaded('attributeCondition') ? $this->attributeCondition : $this->attributeCondition()->with('parentAttribute')->first();
+        if ($cond && $cond->parentAttribute) {
+            return ['field' => $cond->parentAttribute->name, 'value' => $cond->trigger_value];
+        }
+        if (! empty($this->conditional_logic)) {
+            $l = $this->conditional_logic;
+            $field = $l['field'] ?? $l['showIf']['field'] ?? null;
+            $value = $l['value'] ?? $l['showIf']['value'] ?? null;
+            if ($field !== null || $value !== null) {
+                return ['field' => (string) $field, 'value' => (string) $value];
+            }
+        }
+        return null;
     }
 }

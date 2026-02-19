@@ -51,6 +51,69 @@
         <div class="field">
             <label><input type="checkbox" name="is_required" value="1" @if (old('is_required', $field?->is_required)) checked @endif> Required</label>
         </div>
+        <div class="field" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #eee;">
+            <h3 style="margin: 0 0 0.5rem; font-size: 1rem;">Show this field when (optional)</h3>
+            <p style="margin: 0 0 0.75rem; color: #555; font-size: 0.9rem;">Show this field only when another field has a specific value.</p>
+            @php
+                $cond = $field?->attributeCondition;
+                $selectedParentId = old('show_if_parent_id', $cond?->parent_attribute_id);
+                $selectedTriggerValue = old('show_if_trigger_value', $cond?->trigger_value);
+            @endphp
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <div style="min-width: 180px;">
+                    <label for="show_if_parent_id">Parent field</label>
+                    <select id="show_if_parent_id" name="show_if_parent_id">
+                        <option value="">— None (always show) —</option>
+                        @foreach ($parentFieldsWithOptions ?? [] as $pf)
+                            <option value="{{ $pf['id'] }}" @if ((string)$selectedParentId === (string)$pf['id']) selected @endif>{{ $pf['label'] }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div style="min-width: 180px;">
+                    <label for="show_if_trigger_value">Trigger value</label>
+                    <select id="show_if_trigger_value" name="show_if_trigger_value" data-initial-value="{{ e($selectedTriggerValue ?? '') }}">
+                        <option value="">— Select parent first —</option>
+                        @foreach ($parentFieldsWithOptions ?? [] as $pf)
+                            @if ((string)$selectedParentId === (string)$pf['id'])
+                                @foreach ($pf['options'] as $opt)
+                                    <option value="{{ e($opt['value']) }}" @if ((string)$selectedTriggerValue === (string)$opt['value']) selected @endif>{{ e($opt['label']) }}</option>
+                                @endforeach
+                            @endif
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            @if (empty($parentFieldsWithOptions))
+                <div class="help">Add other fields with options (dropdown, radio, checkbox) to this form first, then you can set "Show when".</div>
+            @endif
+        </div>
+        <script>
+            (function () {
+                var parentOptions = @json(collect($parentFieldsWithOptions ?? [])->keyBy('id')->map(fn ($p) => $p['options'])->all());
+                var selParent = document.getElementById('show_if_parent_id');
+                var selTrigger = document.getElementById('show_if_trigger_value');
+                if (!selParent || !selTrigger) return;
+                function updateTriggerOptions() {
+                    var id = selParent.value;
+                    var opts = parentOptions[id] || [];
+                    selTrigger.innerHTML = '';
+                    var first = document.createElement('option');
+                    first.value = '';
+                    first.textContent = opts.length ? '— Select value —' : '— Select parent first —';
+                    selTrigger.appendChild(first);
+                    opts.forEach(function (o) {
+                        var opt = document.createElement('option');
+                        opt.value = o.value;
+                        opt.textContent = o.label;
+                        selTrigger.appendChild(opt);
+                    });
+                }
+                selParent.addEventListener('change', updateTriggerOptions);
+                updateTriggerOptions();
+                var initial = selTrigger.getAttribute('data-initial-value');
+                if (initial) selTrigger.value = initial;
+            })();
+        </script>
         <button type="submit" class="btn">{{ $field ? 'Update field' : 'Add field' }}</button>
     </form>
 
