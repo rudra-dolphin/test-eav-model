@@ -143,7 +143,7 @@ class FormBuilderController extends Controller
     }
 
     /**
-     * Edit field (attribute) and its options.
+     * Edit field (attribute) and its options + sub-fields.
      */
     public function editField(Form $form, Attribute $field): View
     {
@@ -152,13 +152,17 @@ class FormBuilderController extends Controller
         }
         $field->load('fieldType', 'options', 'attributeCondition.parentAttribute');
         $fieldTypes = FieldType::orderBy('name')->get();
+        $fieldTypesForSubField = FieldType::whereNotIn('slug', ['heading', 'heading_sub'])->orderBy('name')->get();
         $parentFieldsWithOptions = $this->getParentFieldsWithOptions($form, $field->id);
+        $existingSubFieldsByTrigger = $this->getExistingSubFieldsByTrigger($field);
 
         return view('forms.build.field-form', [
             'form' => $form,
             'field' => $field,
             'fieldTypes' => $fieldTypes,
+            'fieldTypesForSubField' => $fieldTypesForSubField,
             'parentFieldsWithOptions' => $parentFieldsWithOptions,
+            'existingSubFieldsByTrigger' => $existingSubFieldsByTrigger,
         ]);
     }
 
@@ -192,6 +196,10 @@ class FormBuilderController extends Controller
         $field->update($valid);
 
         $this->saveAttributeCondition($request, $form, $field);
+
+        if ($field->fieldType->supports_options) {
+            $this->saveSubFields($request, $form, $field);
+        }
 
         return redirect()->route('forms.build.edit', $form)
             ->with('message', 'Field updated.');
@@ -345,5 +353,147 @@ class FormBuilderController extends Controller
                 'trigger_value' => (string) $triggerValue,
             ]
         );
+    }
+
+    /**
+     * Get existing child attributes (sub-fields) of this parent, grouped by trigger_value.
+     *
+     * @return array<string, \Illuminate\Support\Collection<int, Attribute>>
+     */
+    private function getExistingSubFieldsByTrigger(Attribute $parent): array
+    {
+        $children = Attribute::whereHas('attributeCondition', function ($q) use ($parent) {
+            $q->where('parent_attribute_id', $parent->id);
+        })->with('fieldType', 'attributeCondition')->get();
+
+        $byTrigger = [];
+        foreach ($children as $attr) {
+            $cond = $attr->attributeCondition;
+            $trigger = $cond ? $cond->trigger_value : '';
+            $byTrigger[$trigger] = $byTrigger[$trigger] ?? collect();
+            $byTrigger[$trigger]->push($attr);
+        }
+        return $byTrigger;
+    }
+
+    /**
+     * Save sub-fields from request. No DB schema change: store flat attributes + attribute_conditions.
+     * Checkbox with multiple options: per-option sub-fields (trigger = option value), so checking "Heart Failure" shows its year/month.
+     * Checkbox with no options: one block, trigger_value = "1". Radio/Select: one block per option.
+     */
+    private function saveSubFields(Request $request, Form $form, Attribute $parent): void
+    {
+        $slug = $parent->fieldType->slug;
+        $parentName = $parent->name;
+        $maxSort = (int) $form->fields()->max('sort_order');
+        $nextSort = $maxSort + 1;
+        $options = $parent->options()->orderBy('sort_order')->get();
+
+        $keepIds = [];
+        if ($slug === 'checkbox' && $options->isEmpty()) {
+            $list = $request->input('sub_fields_checked', []);
+            if (! is_array($list)) {
+                $list = [];
+            }
+            $keepIds = array_merge($keepIds, $this->persistSubFieldList($form, $parent, '1', $parentName . '_', $list, $nextSort));
+            $nextSort += count($list);
+        }
+
+        if (($slug === 'radio' || $slug === 'dropdown') || ($slug === 'checkbox' && $options->isNotEmpty())) {
+            foreach ($options as $opt) {
+                $optionValue = $opt->value;
+                $list = $request->input('sub_fields_option.' . $optionValue, []);
+                if (! is_array($list)) {
+                    $list = [];
+                }
+                $prefix = $parentName . '_' . $optionValue . '_';
+                $keepIds = array_merge($keepIds, $this->persistSubFieldList($form, $parent, $optionValue, $prefix, $list, $nextSort));
+                $nextSort += count($list);
+            }
+        }
+
+        $this->removeOrphanSubFields($form, $parent, $keepIds);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $list
+     * @return array<int, int>
+     */
+    private function persistSubFieldList(Form $form, Attribute $parent, string $triggerValue, string $namePrefix, array $list, int $startSortOrder): array
+    {
+        $seenIds = [];
+        $sortOrder = $startSortOrder;
+        foreach ($list as $i => $row) {
+            $label = trim((string) ($row['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $machineKey = trim((string) ($row['machine_key'] ?? ''));
+            if ($machineKey === '') {
+                $machineKey = $this->labelToMachineKey($label);
+            }
+            $machineKey = preg_replace('/[^a-zA-Z0-9_]/', '_', $machineKey);
+            if ($machineKey === '') {
+                $machineKey = 'sub_' . $i;
+            }
+            $machineKey = strtolower($machineKey);
+            $name = $namePrefix . $machineKey;
+            $fieldTypeId = (int) ($row['field_type_id'] ?? 0);
+            $fieldType = \App\Models\FieldType::find($fieldTypeId);
+            if (! $fieldType) {
+                $fieldType = \App\Models\FieldType::where('slug', 'text')->first();
+            }
+            $id = isset($row['id']) ? (int) $row['id'] : null;
+            $attr = null;
+            if ($id) {
+                $attr = $form->fields()->find($id);
+            }
+            $payload = [
+                'form_id' => $form->id,
+                'field_type_id' => $fieldType->id,
+                'name' => $name,
+                'label' => $label,
+                'sort_order' => $sortOrder++,
+                'is_required' => ! empty($row['required']),
+            ];
+            if ($attr) {
+                $attr->update($payload);
+                $seenIds[] = $attr->id;
+            } else {
+                $attr = Attribute::create($payload);
+                $seenIds[] = $attr->id;
+            }
+            $attr->attributeCondition()->updateOrCreate(
+                [],
+                [
+                    'parent_attribute_id' => $parent->id,
+                    'operator' => '=',
+                    'trigger_value' => $triggerValue,
+                ]
+            );
+        }
+        return $seenIds;
+    }
+
+    /**
+     * Delete sub-fields of this parent that are not in the keep list.
+     *
+     * @param array<int, int> $keepIds
+     */
+    private function removeOrphanSubFields(Form $form, Attribute $parent, array $keepIds): void
+    {
+        Attribute::whereHas('attributeCondition', function ($q) use ($parent) {
+            $q->where('parent_attribute_id', $parent->id);
+        })->whereNotIn('id', $keepIds)->get()->each->delete();
+    }
+
+    /**
+     * Convert label to machine key (lowercase, spaces to underscore).
+     */
+    private function labelToMachineKey(string $label): string
+    {
+        $key = preg_replace('/[^a-zA-Z0-9\s]/', '', $label);
+        $key = preg_replace('/\s+/', '_', trim($key));
+        return strtolower($key) !== '' ? strtolower($key) : 'field';
     }
 }

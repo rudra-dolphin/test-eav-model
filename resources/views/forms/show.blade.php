@@ -58,6 +58,11 @@
                            placeholder="{{ $field['placeholder'] ?? '' }}"
                            @if (!empty($field['validation']['maxLength'])) maxlength="{{ $field['validation']['maxLength'] }}" @endif
                            @if (!empty($field['required'])) required @endif>
+                @elseif ($field['type'] === 'textarea')
+                    <textarea id="field-{{ $field['id'] }}" name="{{ $field['id'] }}" rows="{{ $field['validation']['rows'] ?? 4 }}"
+                              placeholder="{{ $field['placeholder'] ?? '' }}"
+                              @if (!empty($field['validation']['maxLength'])) maxlength="{{ $field['validation']['maxLength'] }}" @endif
+                              @if (!empty($field['required'])) required @endif>{{ old($field['id']) }}</textarea>
                 @elseif ($field['type'] === 'number')
                     <input type="number" id="field-{{ $field['id'] }}" name="{{ $field['id'] }}"
                            value="{{ old($field['id']) }}"
@@ -129,28 +134,30 @@
 
         function getParentValue(fieldId) {
             var input = form.querySelector('[name="' + fieldId + '"]');
-            var checkboxGroup = form.querySelector('[name="' + fieldId + '_checkbox[]"]');
+            var checkboxEscaped = fieldId + '_checkbox\\[\\]';
+            var checkboxGroup = form.querySelector('[name="' + checkboxEscaped + '"]');
             if (checkboxGroup) {
-                var cbs = form.querySelectorAll('[name="' + fieldId + '_checkbox[]"]:checked');
+                var cbs = form.querySelectorAll('[name="' + checkboxEscaped + '"]:checked');
                 if (cbs.length === 0) return '';
-                return Array.prototype.map.call(cbs, function (c) { return c.value; }).join(',');
+                return Array.prototype.map.call(cbs, function (c) { return (c.value || '').trim(); }).filter(Boolean).join(',');
             }
             if (!input) return '';
             if (input.type === 'radio') {
                 var checked = form.querySelector('[name="' + fieldId + '"]:checked');
-                return checked ? checked.value : '';
+                return checked ? (checked.value || '').trim() : '';
             }
-            if (input.type === 'checkbox') return input.checked ? input.value : '';
-            return input.value || '';
+            if (input.type === 'checkbox') return input.checked ? (input.value || '').trim() : '';
+            return (input.value || '').trim();
         }
 
         function toggleConditionalFields() {
             conditionalFields.forEach(function (wrap) {
                 var parentId = wrap.getAttribute('data-show-if-field');
-                var triggerValue = wrap.getAttribute('data-show-if-value');
+                var triggerValue = (wrap.getAttribute('data-show-if-value') || '').trim();
                 if (!parentId) return;
                 var current = getParentValue(parentId);
-                var match = (current === triggerValue) || (triggerValue && current.split(',').indexOf(triggerValue) !== -1);
+                var trigger = triggerValue;
+                var match = (current === trigger) || (trigger && current.split(',').map(function (v) { return v.trim(); }).indexOf(trigger) !== -1);
                 wrap.classList.toggle('conditional-hidden', !match);
                 wrap.querySelectorAll('input, select, textarea').forEach(function (el) {
                     el.disabled = !match;

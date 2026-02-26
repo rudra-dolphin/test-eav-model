@@ -51,6 +51,8 @@
         <div class="field">
             <label><input type="checkbox" name="is_required" value="1" @if (old('is_required', $field?->is_required)) checked @endif> Required</label>
         </div>
+        {{-- Show this field when (optional) - commented out; use Sub fields on parent instead --}}
+        {{--
         <div class="field" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #eee;">
             <h3 style="margin: 0 0 0.5rem; font-size: 1rem;">Show this field when (optional)</h3>
             <p style="margin: 0 0 0.75rem; color: #555; font-size: 0.9rem;">Show this field only when another field has a specific value.</p>
@@ -114,6 +116,180 @@
                 if (initial) selTrigger.value = initial;
             })();
         </script>
+        --}}
+
+        @if ($field && $field->fieldType->supports_options)
+            @php
+                $ftSlug = $field->fieldType->slug;
+                $parentName = $field->name;
+                $existingByTrigger = $existingSubFieldsByTrigger ?? [];
+                $fieldTypesForSubField = $fieldTypesForSubField ?? $fieldTypes ?? collect();
+            @endphp
+            <div class="field" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #eee;">
+                <h3 style="margin: 0 0 0.75rem; font-size: 1rem;">Sub fields</h3>
+                <p style="margin: 0 0 0.75rem; color: #555; font-size: 0.9rem;">Add fields that appear only when this field is checked or when a specific option is selected. Parent and trigger are set automatically.</p>
+
+                @if ($ftSlug === 'checkbox' && $field->options->isEmpty())
+                    <div style="margin-bottom: 1.25rem;">
+                        <h4 style="margin: 0 0 0.5rem; font-size: 0.95rem;">Sub Fields (Shown when checked)</h4>
+                        <div id="sub-fields-checked-list">
+                            @php
+                                $checkedList = old('sub_fields_checked', []);
+                                if ($checkedList === []) {
+                                    $children = $existingByTrigger['1'] ?? collect();
+                                    foreach ($children as $c) {
+                                        $mk = str_starts_with($c->name ?? '', $parentName . '_') ? substr($c->name, strlen($parentName) + 1) : $c->name;
+                                        $checkedList[] = ['id' => $c->id, 'label' => $c->label, 'machine_key' => $mk, 'field_type_id' => $c->field_type_id, 'required' => $c->is_required];
+                                    }
+                                }
+                            @endphp
+                            @foreach ($checkedList as $i => $row)
+                                <div class="sub-field-row" style="display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.5rem;">
+                                    <input type="hidden" name="sub_fields_checked[{{ $i }}][id]" value="{{ $row['id'] ?? '' }}">
+                                    <div style="flex: 1;"><label>Label</label><input type="text" name="sub_fields_checked[{{ $i }}][label]" value="{{ $row['label'] ?? '' }}" placeholder="Label" required></div>
+                                    <div style="flex: 0.8;"><label>Machine key</label><input type="text" name="sub_fields_checked[{{ $i }}][machine_key]" value="{{ $row['machine_key'] ?? '' }}" placeholder="e.g. year"></div>
+                                    <div style="flex: 0.8;"><label>Type</label>
+                                        <select name="sub_fields_checked[{{ $i }}][field_type_id]">
+                                            @foreach ($fieldTypesForSubField as $ft)
+                                                <option value="{{ $ft->id }}" @if (($row['field_type_id'] ?? 0) == $ft->id) selected @endif>{{ $ft->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div style="flex: 0 0 auto;"><label>&nbsp;</label><label><input type="checkbox" name="sub_fields_checked[{{ $i }}][required]" value="1" @if (!empty($row['required'])) checked @endif> Required</label></div>
+                                    <button type="button" class="btn btn-secondary remove-sub" style="padding: 0.5rem 0.75rem;">−</button>
+                                </div>
+                            @endforeach
+                            @if (empty($checkedList))
+                                <div class="sub-field-row" style="display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.5rem;">
+                                    <input type="hidden" name="sub_fields_checked[0][id]" value="">
+                                    <div style="flex: 1;"><label>Label</label><input type="text" name="sub_fields_checked[0][label]" placeholder="Label"></div>
+                                    <div style="flex: 0.8;"><label>Machine key</label><input type="text" name="sub_fields_checked[0][machine_key]" placeholder="e.g. year"></div>
+                                    <div style="flex: 0.8;"><label>Type</label>
+                                        <select name="sub_fields_checked[0][field_type_id]">
+                                            @foreach ($fieldTypesForSubField as $ft)
+                                                <option value="{{ $ft->id }}" @if ($ft->slug === 'text') selected @endif>{{ $ft->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div style="flex: 0 0 auto;"><label>&nbsp;</label><label><input type="checkbox" name="sub_fields_checked[0][required]" value="1"> Required</label></div>
+                                    <button type="button" class="btn btn-secondary remove-sub" style="padding: 0.5rem 0.75rem;">−</button>
+                                </div>
+                            @endif
+                        </div>
+                        <button type="button" id="add-sub-checked" class="btn btn-secondary" style="margin-top: 0.5rem;">+ Add Sub Field</button>
+                    </div>
+                @endif
+
+                @if (($ftSlug === 'radio' || $ftSlug === 'dropdown' || ($ftSlug === 'checkbox' && $field->options->isNotEmpty())) && $field->options->isNotEmpty())
+                    @foreach ($field->options as $opt)
+                        @php
+                            $optVal = $opt->value;
+                            $optList = old('sub_fields_option.' . $optVal, []);
+                            if ($optList === []) {
+                                $children = $existingByTrigger[$optVal] ?? collect();
+                                foreach ($children as $c) {
+                                    $prefix = $parentName . '_' . $optVal . '_';
+                                    $mk = str_starts_with($c->name ?? '', $prefix) ? substr($c->name, strlen($prefix)) : $c->name;
+                                    $optList[] = ['id' => $c->id, 'label' => $c->label, 'machine_key' => $mk, 'field_type_id' => $c->field_type_id, 'required' => $c->is_required];
+                                }
+                            }
+                        @endphp
+                        <div style="margin-bottom: 1.25rem;">
+                            <h4 style="margin: 0 0 0.5rem; font-size: 0.95rem;">Sub Fields (Shown when “{{ e($opt->label) }}” is selected)</h4>
+                            <div class="sub-fields-option-list" data-option-value="{{ e($optVal) }}">
+                                @foreach ($optList as $i => $row)
+                                    <div class="sub-field-row" style="display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.5rem;">
+                                        <input type="hidden" name="sub_fields_option[{{ $optVal }}][{{ $i }}][id]" value="{{ $row['id'] ?? '' }}">
+                                        <div style="flex: 1;"><label>Label</label><input type="text" name="sub_fields_option[{{ $optVal }}][{{ $i }}][label]" value="{{ $row['label'] ?? '' }}" placeholder="Label"></div>
+                                        <div style="flex: 0.8;"><label>Machine key</label><input type="text" name="sub_fields_option[{{ $optVal }}][{{ $i }}][machine_key]" value="{{ $row['machine_key'] ?? '' }}" placeholder="e.g. year"></div>
+                                        <div style="flex: 0.8;"><label>Type</label>
+                                            <select name="sub_fields_option[{{ $optVal }}][{{ $i }}][field_type_id]">
+                                                @foreach ($fieldTypesForSubField as $ft)
+                                                    <option value="{{ $ft->id }}" @if (($row['field_type_id'] ?? 0) == $ft->id) selected @endif>{{ $ft->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div style="flex: 0 0 auto;"><label>&nbsp;</label><label><input type="checkbox" name="sub_fields_option[{{ $optVal }}][{{ $i }}][required]" value="1" @if (!empty($row['required'])) checked @endif> Required</label></div>
+                                        <button type="button" class="btn btn-secondary remove-sub" style="padding: 0.5rem 0.75rem;">−</button>
+                                    </div>
+                                @endforeach
+                                @if (empty($optList))
+                                    <div class="sub-field-row" style="display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.5rem;">
+                                        <input type="hidden" name="sub_fields_option[{{ $optVal }}][0][id]" value="">
+                                        <div style="flex: 1;"><label>Label</label><input type="text" name="sub_fields_option[{{ $optVal }}][0][label]" placeholder="Label"></div>
+                                        <div style="flex: 0.8;"><label>Machine key</label><input type="text" name="sub_fields_option[{{ $optVal }}][0][machine_key]" placeholder="e.g. year"></div>
+                                        <div style="flex: 0.8;"><label>Type</label>
+                                            <select name="sub_fields_option[{{ $optVal }}][0][field_type_id]">
+                                                @foreach ($fieldTypesForSubField as $ft)
+                                                    <option value="{{ $ft->id }}" @if ($ft->slug === 'text') selected @endif>{{ $ft->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div style="flex: 0 0 auto;"><label>&nbsp;</label><label><input type="checkbox" name="sub_fields_option[{{ $optVal }}][0][required]" value="1"> Required</label></div>
+                                        <button type="button" class="btn btn-secondary remove-sub" style="padding: 0.5rem 0.75rem;">−</button>
+                                    </div>
+                                @endif
+                            </div>
+                            <button type="button" class="add-sub-option btn btn-secondary" style="margin-top: 0.5rem;" data-option-value="{{ e($optVal) }}">+ Add Sub Field</button>
+                        </div>
+                    @endforeach
+                @endif
+
+                @if ($ftSlug === 'radio' || $ftSlug === 'dropdown')
+                    @if ($field->options->isEmpty())
+                        <p class="help">Save options above first, then you can add sub fields per option.</p>
+                    @endif
+                @endif
+            </div>
+            <script>
+            (function () {
+                @php
+                    $subFieldTypeOptionsHtml = '';
+                    foreach ($fieldTypesForSubField ?? [] as $ft) {
+                        $subFieldTypeOptionsHtml .= '<option value="' . $ft->id . '">' . e($ft->name) . '</option>';
+                    }
+                @endphp
+                var subFieldTypesHtml = {!! json_encode($subFieldTypeOptionsHtml) !!};
+                document.getElementById('add-sub-checked')?.addEventListener('click', function () {
+                    var list = document.getElementById('sub-fields-checked-list');
+                    if (!list) return;
+                    var n = list.querySelectorAll('.sub-field-row').length;
+                    var row = document.createElement('div');
+                    row.className = 'sub-field-row';
+                    row.style.cssText = 'display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.5rem;';
+                    row.innerHTML = '<input type="hidden" name="sub_fields_checked[' + n + '][id]" value="">' +
+                        '<div style="flex:1"><label>Label</label><input type="text" name="sub_fields_checked[' + n + '][label]" placeholder="Label"></div>' +
+                        '<div style="flex:0.8"><label>Machine key</label><input type="text" name="sub_fields_checked[' + n + '][machine_key]" placeholder="e.g. year"></div>' +
+                        '<div style="flex:0.8"><label>Type</label><select name="sub_fields_checked[' + n + '][field_type_id]">' + subFieldTypesHtml + '</select></div>' +
+                        '<div style="flex:0 0 auto"><label>&nbsp;</label><label><input type="checkbox" name="sub_fields_checked[' + n + '][required]" value="1"> Required</label></div>' +
+                        '<button type="button" class="btn btn-secondary remove-sub" style="padding:0.5rem 0.75rem">−</button>';
+                    list.appendChild(row);
+                    row.querySelector('.remove-sub').onclick = function () { row.remove(); };
+                });
+                document.querySelectorAll('.add-sub-option').forEach(function (btn) {
+                    btn.onclick = function () {
+                        var optVal = btn.getAttribute('data-option-value');
+                        var list = btn.previousElementSibling;
+                        if (!list || !optVal) return;
+                        var n = list.querySelectorAll('.sub-field-row').length;
+                        var row = document.createElement('div');
+                        row.className = 'sub-field-row';
+                        row.style.cssText = 'display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.5rem;';
+                        row.innerHTML = '<input type="hidden" name="sub_fields_option[' + optVal + '][' + n + '][id]" value="">' +
+                            '<div style="flex:1"><label>Label</label><input type="text" name="sub_fields_option[' + optVal + '][' + n + '][label]" placeholder="Label"></div>' +
+                            '<div style="flex:0.8"><label>Machine key</label><input type="text" name="sub_fields_option[' + optVal + '][' + n + '][machine_key]" placeholder="e.g. year"></div>' +
+                            '<div style="flex:0.8"><label>Type</label><select name="sub_fields_option[' + optVal + '][' + n + '][field_type_id]">' + subFieldTypesHtml + '</select></div>' +
+                            '<div style="flex:0 0 auto"><label>&nbsp;</label><label><input type="checkbox" name="sub_fields_option[' + optVal + '][' + n + '][required]" value="1"> Required</label></div>' +
+                            '<button type="button" class="btn btn-secondary remove-sub" style="padding:0.5rem 0.75rem">−</button>';
+                        list.appendChild(row);
+                        row.querySelector('.remove-sub').onclick = function () { row.remove(); };
+                    };
+                });
+                document.querySelectorAll('.remove-sub').forEach(function (b) { b.onclick = function () { b.closest('.sub-field-row')?.remove(); }; });
+            })();
+            </script>
+        @endif
+
         <button type="submit" class="btn">{{ $field ? 'Update field' : 'Add field' }}</button>
     </form>
 

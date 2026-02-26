@@ -130,11 +130,9 @@ class FormStructureController extends Controller
     }
 
     /**
-     * Nest fields that have showIf under their parent field as "children".
-     * - When children have different trigger values (e.g. diabetes, hypertension), group by that value
-     *   so values sit under "diabetes" / "hypertension", not flat under the parent.
-     * - When all children share one trigger value (e.g. yes/no), keep a single list under that value.
-     * Field keys are ordered so "options" comes last (after "children") in the JSON.
+     * Nest fields that have showIf under their parent. When parent has options, each option gets
+     * its related children inside that option object (option.children). Otherwise children stay
+     * in a top-level "children" object keyed by trigger value. Structure stays dynamic.
      *
      * @param array<int, array<string, mixed>> $fields Normalized flat fields (with showIf where applicable)
      * @return array<int, array<string, mixed>>
@@ -158,17 +156,39 @@ class FormStructureController extends Controller
             }
             $id = $f['id'] ?? '';
             $rawChildren = $parentIdToChildren[$id] ?? [];
-            if ($rawChildren !== []) {
-                $triggerValues = array_unique(array_column($rawChildren, 'triggerValue'));
-                if (count($triggerValues) > 1) {
-                    $f['children'] = $this->groupChildrenByTriggerValue($rawChildren);
-                } else {
-                    $f['children'] = array_map(fn ($c) => $c['field'], $rawChildren);
-                }
+            $childrenByTrigger = $rawChildren !== [] ? $this->groupChildrenByTriggerValue($rawChildren) : [];
+
+            if (! empty($f['options']) && $childrenByTrigger !== []) {
+                $f['options'] = $this->inlineChildrenIntoOptions($f['options'], $childrenByTrigger);
+            } elseif ($childrenByTrigger !== []) {
+                $f['children'] = $childrenByTrigger;
             }
             $result[] = $this->fieldWithOptionsLast($f);
         }
         return $result;
+    }
+
+    /**
+     * Build options array where each option is { value, label, children } so values related to
+     * an option (e.g. diabetes) sit inside that option as children. Same structure for outer array.
+     *
+     * @param array<int, array{value: string, label: string}> $options
+     * @param array<string, array<int, array<string, mixed>>> $childrenByTrigger
+     * @return array<int, array<string, mixed>>
+     */
+    private function inlineChildrenIntoOptions(array $options, array $childrenByTrigger): array
+    {
+        $out = [];
+        foreach ($options as $opt) {
+            $val = $opt['value'] ?? '';
+            $item = [
+                'value' => $val,
+                'label' => $opt['label'] ?? $val,
+            ];
+            $item['children'] = $childrenByTrigger[$val] ?? [];
+            $out[] = $item;
+        }
+        return $out;
     }
 
     /**

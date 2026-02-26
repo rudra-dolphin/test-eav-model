@@ -14,6 +14,7 @@ class FieldTypeSeeder extends Seeder
     {
         $types = [
             ['name' => 'Text', 'slug' => 'text', 'description' => 'Single line text', 'supports_options' => false, 'allows_multiple' => false, 'value_column' => 'value_text'],
+            ['name' => 'Textarea', 'slug' => 'textarea', 'description' => 'Multi-line text', 'supports_options' => false, 'allows_multiple' => false, 'value_column' => 'value_text'],
             ['name' => 'Number', 'slug' => 'number', 'description' => 'Numeric input', 'supports_options' => false, 'allows_multiple' => false, 'value_column' => 'value_int'],
             ['name' => 'Decimal', 'slug' => 'decimal', 'description' => 'Decimal number', 'supports_options' => false, 'allows_multiple' => false, 'value_column' => 'value_decimal'],
             ['name' => 'Date', 'slug' => 'date', 'description' => 'Date picker', 'supports_options' => false, 'allows_multiple' => false, 'value_column' => 'value_date'],

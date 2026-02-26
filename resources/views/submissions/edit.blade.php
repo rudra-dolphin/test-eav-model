@@ -66,6 +66,10 @@
                     <input type="text" id="field-{{ $attr->name }}" name="{{ $attr->name }}"
                            value="{{ old($attr->name, $current) }}"
                            placeholder="{{ $attr->placeholder ?? '' }}">
+                @elseif ($type === 'textarea')
+                    <textarea id="field-{{ $attr->name }}" name="{{ $attr->name }}" rows="{{ $attr->validation_config['rows'] ?? 4 }}"
+                              placeholder="{{ $attr->placeholder ?? '' }}"
+                              @if ($attr->is_required) required @endif>{{ old($attr->name, $current) }}</textarea>
                 @elseif ($type === 'number')
                     <input type="number" id="field-{{ $attr->name }}" name="{{ $attr->name }}"
                            value="{{ old($attr->name, $current) }}">
@@ -140,29 +144,31 @@
         if (!conditionalFields.length) return;
 
         function getParentValue(fieldId) {
-            var checkboxGroup = form.querySelector('[name="' + fieldId + '_checkbox[]"]');
+            var checkboxEscaped = fieldId + '_checkbox\\[\\]';
+            var checkboxGroup = form.querySelector('[name="' + checkboxEscaped + '"]');
             if (checkboxGroup) {
-                var cbs = form.querySelectorAll('[name="' + fieldId + '_checkbox[]"]:checked');
+                var cbs = form.querySelectorAll('[name="' + checkboxEscaped + '"]:checked');
                 if (cbs.length === 0) return '';
-                return Array.prototype.map.call(cbs, function (c) { return c.value; }).join(',');
+                return Array.prototype.map.call(cbs, function (c) { return (c.value || '').trim(); }).filter(Boolean).join(',');
             }
             var input = form.querySelector('[name="' + fieldId + '"]');
             if (!input) return '';
             if (input.type === 'radio') {
                 var checked = form.querySelector('[name="' + fieldId + '"]:checked');
-                return checked ? checked.value : '';
+                return checked ? (checked.value || '').trim() : '';
             }
-            if (input.type === 'checkbox') return input.checked ? input.value : '';
-            return input.value || '';
+            if (input.type === 'checkbox') return input.checked ? (input.value || '').trim() : '';
+            return (input.value || '').trim();
         }
 
         function toggleConditionalFields() {
             conditionalFields.forEach(function (wrap) {
                 var parentId = wrap.getAttribute('data-show-if-field');
-                var triggerValue = wrap.getAttribute('data-show-if-value');
+                var triggerValue = (wrap.getAttribute('data-show-if-value') || '').trim();
                 if (!parentId) return;
                 var current = getParentValue(parentId);
-                var match = (current === triggerValue) || (triggerValue && current.split(',').indexOf(triggerValue) !== -1);
+                var trigger = triggerValue;
+                var match = (current === trigger) || (trigger && current.split(',').map(function (v) { return v.trim(); }).indexOf(trigger) !== -1);
                 wrap.classList.toggle('conditional-hidden', !match);
                 wrap.querySelectorAll('input, select, textarea').forEach(function (el) {
                     el.disabled = !match;
