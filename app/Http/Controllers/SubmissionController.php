@@ -24,6 +24,7 @@ class SubmissionController extends Controller
         $entity->load([
             'form.fields.fieldType',
             'form.fields.options',
+            'form.fields.attributeCondition.parentAttribute',
             'attributeValues',
         ]);
 
@@ -60,6 +61,9 @@ class SubmissionController extends Controller
         $fields = $entity->form->fields;
 
         foreach ($fields as $attr) {
+            if (in_array($attr->fieldType->slug, ['heading', 'heading_sub'], true)) {
+                continue;
+            }
             $name = $attr->name;
 
             // Match the naming used in the public form submit page

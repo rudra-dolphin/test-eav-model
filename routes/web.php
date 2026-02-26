@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\FormStructureController as ApiFormStructureController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\FormBuilderController;
 use App\Http\Controllers\FormController;
@@ -31,6 +32,11 @@ Route::post('/forms/build/{form}/fields', [FormBuilderController::class, 'storeF
 Route::get('/forms/build/{form}/fields/{field}/edit', [FormBuilderController::class, 'editField'])->name('forms.build.fields.edit');
 Route::put('/forms/build/{form}/fields/{field}', [FormBuilderController::class, 'updateField'])->name('forms.build.fields.update');
 Route::post('/forms/build/{form}/fields/{field}/options', [FormBuilderController::class, 'updateFieldOptions'])->name('forms.build.fields.options');
+Route::post('/forms/build/{form}/fields/{field}/move-up', [FormBuilderController::class, 'moveFieldUp'])->name('forms.build.fields.moveUp');
+Route::post('/forms/build/{form}/fields/{field}/move-down', [FormBuilderController::class, 'moveFieldDown'])->name('forms.build.fields.moveDown');
 Route::delete('/forms/build/{form}/fields/{field}', [FormBuilderController::class, 'destroyField'])->name('forms.build.fields.destroy');
 Route::get('/forms/{slug}', [FormController::class, 'show'])->name('forms.show');
 Route::post('/forms/{slug}', [FormController::class, 'store'])->name('forms.store');
+
+// API: department-wise form structure (Patient Details + dynamic form)
+Route::get('/api/departments/{department}/form-structure', [ApiFormStructureController::class, 'getByDepartment'])->name('api.departments.form-structure');

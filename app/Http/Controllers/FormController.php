@@ -85,6 +85,9 @@ class FormController extends Controller
         $entity->save();
 
         foreach ($form->fields as $attr) {
+            if (in_array($attr->fieldType->slug, ['heading', 'heading_sub'], true)) {
+                continue;
+            }
             $name = $attr->name;
             $value = $request->input($name);
 

@@ -1,53 +1,54 @@
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('title', 'Hospital Forms') – {{ config('app.name') }}</title>
+    <title>@yield('title', 'Form Management') – {{ config('app.name') }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f5f5f0; color: #222; line-height: 1.5; }
-        a { color: #2563eb; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .container { max-width: 42rem; margin: 0 auto; }
-        nav { margin-bottom: 1.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid #ddd; }
-        .dept { font-size: 0.8rem; color: #555; background: #eee; padding: 0.2rem 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; display: inline-block; }
-        .dept-heading { font-size: 0.9rem; color: #555; margin: 1.25rem 0 0.5rem; padding-bottom: 0.25rem; }
-        .dept-heading:first-of-type { margin-top: 0; }
-        .card { background: #fff; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-        .card h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
-        .card p { margin: 0; color: #555; font-size: 0.9rem; }
-        label { display: block; font-weight: 500; margin-bottom: 0.35rem; }
-        input[type="text"], input[type="number"], input[type="date"], select, textarea {
-            width: 100%; padding: 0.5rem .75rem; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem;
-        }
-        input:focus, select:focus, textarea:focus { outline: none; border-color: #2563eb; }
-        .field { margin-bottom: 1.25rem; }
-        .field .help { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
-        .required::after { content: " *"; color: #b91c1c; }
-        .btn { display: inline-block; padding: 0.5rem 1rem; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; }
-        .btn:hover { background: #1d4ed8; }
-        .btn-secondary { background: #64748b; }
-        .btn-secondary:hover { background: #475569; }
-        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
-        .alert-success { background: #dcfce7; color: #166534; }
+        .form-section-title { font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: var(--bs-primary); }
+        .form-section-title:first-of-type { margin-top: 0; }
+        .form-subsection-title { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.5rem; color: #495057; }
+        .field.conditional-hidden { display: none !important; }
         .options-list { list-style: none; padding: 0; margin: 0; }
         .options-list li { margin-bottom: 0.5rem; }
-        .options-list label { display: inline; font-weight: normal; margin-left: 0.35rem; }
+        .options-list label { font-weight: normal; margin-left: 0.35rem; }
+        label.required::after { content: " *"; color: var(--bs-danger); }
+        .dept { font-size: 0.8rem; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <nav>
-            <a href="{{ route('forms.index') }}">Hospital forms</a>
-            <a href="{{ route('departments.index') }}" style="margin-left: 1rem;">Departments</a>
-            <a href="{{ route('patients.index') }}" style="margin-left: 1rem;">Patients</a>
-            <a href="{{ route('forms.build.index') }}" style="margin-left: 1rem;">Build forms</a>
-        </nav>
+
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-semibold" href="{{ route('forms.index') }}">Form Management</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto gap-2 gap-lg-3">
+                    <li class="nav-item"><a class="nav-link" href="{{ route('forms.index') }}">Forms</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ route('departments.index') }}">Departments</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ route('patients.index') }}">Patients</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ route('forms.build.index') }}">Build forms</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container py-4">
         @if (session('message'))
-            <div class="alert alert-success">{{ session('message') }}</div>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ session('message') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
         @endif
         @yield('content')
-    </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    @stack('scripts')
 </body>
+
 </html>
