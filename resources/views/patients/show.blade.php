@@ -3,59 +3,62 @@
 @section('title', 'Patient: ' . $patient->name)
 
 @section('content')
-    <p style="margin-bottom: 1rem;"><a href="{{ route('patients.index') }}">← Back to patients</a></p>
+    <p class="mb-3"><a href="{{ route('patients.index') }}" class="text-decoration-none">← Back to patients</a></p>
 
-    <div class="card">
-        <h1 style="margin: 0 0 0.75rem;">{{ $patient->name }}</h1>
-        <p style="margin: 0; color: #555;">
-            <strong>Department:</strong> {{ $patient->department ?? '—' }}
-            &nbsp;|&nbsp;
-            <strong>Patient #:</strong> {{ $patient->patient_number ?? '—' }}
-            &nbsp;|&nbsp;
-            <strong>DOB:</strong> {{ $patient->date_of_birth?->format('Y-m-d') ?? '—' }}
-        </p>
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h1 class="h5 mb-2">{{ $patient->name }}</h1>
+            <p class="text-muted small mb-0">
+                <strong>Department:</strong> {{ $patient->department ?? '—' }}
+                &nbsp;|&nbsp;
+                <strong>Patient #:</strong> {{ $patient->patient_number ?? '—' }}
+                &nbsp;|&nbsp;
+                <strong>DOB:</strong> {{ $patient->date_of_birth?->format('Y-m-d') ?? '—' }}
+            </p>
+        </div>
     </div>
 
-    <h2 style="margin: 1.25rem 0 0.75rem; font-size: 1.1rem;">Submitted forms</h2>
+    <h2 class="h6 mb-3">Submitted forms</h2>
 
     @if ($submissions->isEmpty())
-        <div class="card">
-            <p>No submissions yet for this patient.</p>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <p class="text-muted mb-0">No submissions yet for this patient.</p>
+            </div>
         </div>
     @else
-        <div class="card">
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr style="text-align: left; border-bottom: 1px solid #ddd;">
-                        <th style="padding: 0.5rem 0;">Form</th>
-                        <th style="padding: 0.5rem 0;">Status</th>
-                        <th style="padding: 0.5rem 0;">Submitted at</th>
-                        <th style="padding: 0.5rem 0;"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($submissions as $s)
-                        <tr style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 0.5rem 0;">{{ $s->form?->title ?? '—' }}</td>
-                            <td style="padding: 0.5rem 0;">{{ $s->status }}</td>
-                            <td style="padding: 0.5rem 0;">{{ $s->created_at?->format('Y-m-d H:i') }}</td>
-                            <td style="padding: 0.5rem 0;">
-                                <a class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.9rem;"
-                                   href="{{ route('patients.submissions.edit', [$patient, $s]) }}">
-                                    View / Edit values
-                                </a>
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-
-            @if ($submissions->hasPages())
-                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
-                    {{ $submissions->links() }}
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Form</th>
+                                <th>Status</th>
+                                <th>Submitted at</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($submissions as $s)
+                                <tr>
+                                    <td>{{ $s->form?->title ?? '—' }}</td>
+                                    <td>{{ $s->status }}</td>
+                                    <td>{{ $s->created_at?->format('Y-m-d H:i') }}</td>
+                                    <td class="text-end">
+                                        <a href="{{ route('patients.submissions.edit', [$patient, $s]) }}" class="btn btn-sm btn-outline-primary">View / Edit</a>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
-            @endif
+                @if ($submissions->hasPages())
+                    <div class="card-footer">
+                        {{ $submissions->links() }}
+                    </div>
+                @endif
+            </div>
         </div>
     @endif
 @endsection
-
